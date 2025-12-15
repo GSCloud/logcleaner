@@ -13,102 +13,133 @@ import (
 
 // CLEANLOG - CONTAINS MAIN LOGIC
 
+// cleanLog performs the core log file trimming and filtering operations.
 // path: file path to the log
-// maxRows: max number of rows to export
 // maxRows: max number of rows to keep
-// dateFormat: date format for filtration (TBD, just a placeholder now)
+// dateFormat: date string for filtration. If invalid, date filtering is skipped.
 func cleanLog(path string, maxRows int, dateFormat string) error {
-	backupPath := path + "." + time.Now().Format("2006-01-02 15:04:05") + ".bak"
+	// 1. Create a backup file with a timestamp
+	backupPath := fmt.Sprintf("%s.%s.bak", path, time.Now().Format("2006-01-02 15:04:05"))
 	if err := os.Rename(path, backupPath); err != nil {
-		return fmt.Errorf("Error backing up log %s to %s: %w", path, backupPath, err)
+		return fmt.Errorf("error backing up log %s to %s: %w", path, backupPath, err)
 	}
 
-	// open backup for reading
+	// 2. Open backup for reading
 	file, err := os.Open(backupPath)
 	if err != nil {
-		return fmt.Errorf("Error opening backup file %s: %w", backupPath, err)
+		return fmt.Errorf("error opening backup file %s: %w", backupPath, err)
 	}
 	defer file.Close()
 
-	// read all lines
-	var lines []string
+	// 3. Read all lines from the backup file
+	var allLines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		allLines = append(allLines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("Error reading backup file: %w", err)
+		return fmt.Errorf("error reading backup file: %w", err)
 	}
 
-	// empty log
-	if len(lines) == 0 {
+	// 4. Handle empty log file
+	if len(allLines) == 0 {
 		fmt.Printf("Log %s is empty.\n", path)
-		_, err := os.Create(path)
-		if err != nil {
-			return fmt.Errorf("Error creating empty log file: %w", err)
+		// Recreate the original file as an empty file
+		if _, err := os.Create(path); err != nil {
+			return fmt.Errorf("error creating empty log file: %w", err)
 		}
 		return nil
 	}
 
-	// 1. Filter by date
+	// 5. Date Filtering Logic
 	const logDateFormat = "2006-01-02 15:04:05"
-	minDate, err := time.Parse(logDateFormat, dateFormat)
+	minDate, dateParseErr := time.Parse(logDateFormat, dateFormat)
 
 	var filteredLines []string
-	if err != nil {
+	lastKeptIndex := -1 // Index of the last element added to filteredLines
+
+	if dateParseErr != nil {
 		// If dateFormat is not a valid date (like "irrelevant"), skip date filtering.
-		// This allows the trimming test to pass without providing a real date.
-		filteredLines = lines
+		// No merging of lines is necessary when filtering is skipped, as all lines are kept.
+		filteredLines = allLines
+		fmt.Printf("Date filter skipped: '%s' is not a valid date format. Trimming only by line count.\n", dateFormat)
 	} else {
-		for _, line := range lines {
-			// Extract date string from the beginning of the line
+		// Date filtering is active.
+		for _, line := range allLines {
+			var err error
+			var lineDate time.Time
+			isMainLogLine := false
+
+			// Check if the line is long enough to contain the timestamp
 			if len(line) >= len(logDateFormat) {
 				lineDateStr := line[:len(logDateFormat)]
-				lineDate, err := time.Parse(logDateFormat, lineDateStr)
+				lineDate, err = time.Parse(logDateFormat, lineDateStr)
 
-				if err == nil && !lineDate.Before(minDate) {
-					// Keep lines that are not before the minimum date
-					filteredLines = append(filteredLines, line)
-				} else if err != nil {
-					// If a line doesn't start with a valid date, keep it.
-					filteredLines = append(filteredLines, line)
+				if err == nil {
+					// Successfully parsed the date from the line.
+					if !lineDate.Before(minDate) {
+						// It's a main log line and it passed the date filter.
+						isMainLogLine = true
+					}
+					// If the date is too old, isMainLogLine remains false, and it won't be kept.
 				}
+				// If parsing fails (err != nil), isMainLogLine remains false.
 			}
+
+			if isMainLogLine {
+				// Case 1: Valid main log line, passed date filter.
+				filteredLines = append(filteredLines, line)
+				lastKeptIndex = len(filteredLines) - 1
+			} else if lastKeptIndex != -1 {
+				// Case 2: Continuation line (no valid date OR failed date check) that follows a kept line.
+				// Append this line to the preceding kept line, using a single space as separator.
+				// The index remains the same as we modify the last element, not add a new one.
+				filteredLines[lastKeptIndex] += " " + line // <-- Changed "\n" to " "
+			}
+			// Case 3: Line that failed date filter and is not following a kept line is discarded.
 		}
+
+		// The number of "lines" reported here is the number of grouped entries.
+		fmt.Printf("Date filter applied: keeping entries newer than %s. Original lines: %d, kept entries: %d.\n", dateFormat, len(allLines), len(filteredLines))
 	}
 
-	// 2. Trim the filtered lines to max rows
+	// 6. Trim the filtered entries (which may contain multiline content) to max rows
 	var finalLines []string
 	if len(filteredLines) > maxRows {
+		// Keep only the last 'maxRows' entries (each entry can be multiline).
 		finalLines = filteredLines[len(filteredLines)-maxRows:]
 	} else {
-		finalLines = filteredLines // No trimming needed if lines are within the limit
+		// No trimming needed if entries are within the limit
+		finalLines = filteredLines
 	}
 
-	// new temp file
+	// 7. Write to a new temporary file (atomic move preparation)
+	// Create temp file in the same directory as the original log
 	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
 	if err != nil {
-		return fmt.Errorf("Error creating temporary file: %w", err)
+		return fmt.Errorf("error creating temporary file: %w", err)
 	}
 	tempPath := tempFile.Name()
 
 	writer := bufio.NewWriter(tempFile)
+	// IMPORTANT: Use Fprint/Fprintln. Fprintln appends the newline character automatically.
+	// Note: Since entries now use space separation, Fprintln will output single-line log entries.
 	for _, line := range finalLines {
 		if _, err := fmt.Fprintln(writer, line); err != nil {
 			tempFile.Close() // Close file before returning
-			return fmt.Errorf("Error writing to temporary file: %w", err)
+			return fmt.Errorf("error writing to temporary file: %w", err)
 		}
 	}
 	writer.Flush()   // Ensure all buffered data is written to the file
 	tempFile.Close() // Close the file to release the handle
 
-	// atomic move - temp to the origin
+	// 8. Atomic move - temporary file replaces the original log
 	if err = os.Rename(tempPath, path); err != nil {
 		fmt.Printf("Error when renaming temporary file, restoring backup: %v\n", err)
 		os.Rename(backupPath, path) // try to fix it
 		return fmt.Errorf("atomic move failed: %v", err)
 	}
-	fmt.Printf("Log %s successfully purged. Original backup: %s. New log has %d lines. Format used: %s\n", path, backupPath, len(finalLines), dateFormat)
+	fmt.Printf("Log %s successfully purged. Original backup: %s. New log has %d grouped entries.\n", path, backupPath, len(finalLines))
 	return nil
 }
 
@@ -119,7 +150,7 @@ func (e *HelpDisplayedError) Error() string {
 	return ""
 }
 
-// main
+// main entry point
 func main() {
 	var rootCmd = &cobra.Command{
 		Short:   "Minimalistic tool for rotating and cleaning logs.",
@@ -144,11 +175,13 @@ func main() {
 			rowsStr := args[1]
 			format := args[2]
 
+			// Validate max_lines is a number
 			rows, err := strconv.Atoi(rowsStr)
 			if err != nil {
 				// Error: Bad argument format
 				return fmt.Errorf("error: second argument 'max_lines' must be a number, but was: %s", rowsStr)
 			}
+			// Validate max_lines is positive
 			if rows <= 0 {
 				// Error: Invalid argument value
 				return fmt.Errorf("error: maximum number of rows must be a positive number")
@@ -164,16 +197,12 @@ func main() {
 
 	// run Cobra
 	if err := rootCmd.Execute(); err != nil {
-
-		// CHECK IF THE ERROR IS NOT OUR OWN SIGNAL ERROR
-
-		// If it is our signal (HelpDisplayedError), we exit with code 0 (success).
-		// All other errors (e.g. I/O error in cleanLog or bad line format) exit with code 1.
+		// Check if the error is our own signal error (HelpDisplayedError)
 		if _, ok := err.(*HelpDisplayedError); ok {
-			os.Exit(0)
+			os.Exit(0) // Exit with success code 0
 		}
 
-		// other errors
+		// Other errors (e.g., I/O error) exit with code 1.
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

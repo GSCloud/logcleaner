@@ -233,7 +233,7 @@ func TestCleanLog_WithDateFilter(t *testing.T) {
 
 	// Optional: Check the date of the first line to be sure
 	firstLine := lines[0]
-	if !strings.HasPrefix(firstLine, "2025-10-26") {
-		t.Errorf("Expected first line to be from 2025-10-26, but got: %s", firstLine)
+	if !strings.HasPrefix(firstLine, "2025-11-09 13:06:55") {
+		t.Errorf("Expected first line to be from 2025-11-09 13:06:55, but got: %s", firstLine)
 	}
 }
