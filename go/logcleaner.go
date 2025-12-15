@@ -42,40 +42,43 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	// empty log
 	if len(lines) == 0 {
 		fmt.Printf("Log %s is empty.\n", path)
-		//os.Create(path)
+		_, err := os.Create(path)
+		if err != nil {
+			return fmt.Errorf("Error creating empty log file: %w", err)
+		}
 		return nil
 	}
 
-	// trim lines to max rows
+	// Trim lines to max rows
 	var trimmedLines []string
 	if len(lines) > maxRows {
 		trimmedLines = lines[len(lines)-maxRows:]
 	} else {
-		trimmedLines = lines
+		trimmedLines = lines // No trimming needed if lines are within the limit
 	}
 
 	// dateFormat is not used right now, just needed as a parameter
 
 	// new temp file
-	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp.")
+	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
 	if err != nil {
 		return fmt.Errorf("Error creating temporary file: %w", err)
 	}
-	tempPath := tempFile.Name()
-	defer tempFile.Close()
+	tempPath := tempFile.Name() // Storing path for the final rename
 
 	// write the trimmed lines
 	writer := bufio.NewWriter(tempFile)
 	for _, line := range trimmedLines {
 		if _, err := fmt.Fprintln(writer, line); err != nil {
+			tempFile.Close() // Close file before returning
 			return fmt.Errorf("Error writing to temporary file: %w", err)
 		}
 	}
-	writer.Flush()
-	tempFile.Close()
+	writer.Flush()   // Ensure all buffered data is written to the file
+	tempFile.Close() // Close the file to release the handle
 
 	// atomic move - temp to the origin
-	if err := os.Rename(tempPath, path); err != nil {
+	if err = os.Rename(tempPath, path); err != nil {
 		fmt.Printf("Error when renaming temporary file, restoring backup: %v\n", err)
 		os.Rename(backupPath, path) // try to fix it
 		return fmt.Errorf("atomic move failed: %v", err)
@@ -119,11 +122,11 @@ func main() {
 			rows, err := strconv.Atoi(rowsStr)
 			if err != nil {
 				// Error: Bad argument format
-				return fmt.Errorf("Error: second argument 'max_lines' must be a number. Entered: %s", rowsStr)
+				return fmt.Errorf("error: second argument 'max_lines' must be a number, but was: %s", rowsStr)
 			}
 			if rows <= 0 {
 				// Error: Invalid argument value
-				return fmt.Errorf("Error: Maximum number of rows must be a positive number")
+				return fmt.Errorf("error: maximum number of rows must be a positive number")
 			}
 
 			// run main logic
