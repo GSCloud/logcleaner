@@ -155,7 +155,7 @@ func main() {
 	var rootCmd = &cobra.Command{
 		Short:   "Minimalistic tool for rotating and cleaning logs.",
 		Long:    "LOGCLEANER is designed to maintain optimal log file size by precisely truncating a specified log file. It retains only the desired number of the most recent lines, allowing filtering up to a designated date in the past. This makes it easy to drop outdated log entries and ensure your logs remain current and manageable.\n",
-		Use:     "\tlogcleaner [log_path] [max_lines] [date_format]",
+		Use:     "\tlogcleaner <log_path> <max_lines> <date_format>",
 		Example: "\tlogcleaner /path/messages.txt 500 \"2025-01-02 15:04:05\"",
 		// silencing Cobra parameters
 		SilenceErrors: true,
