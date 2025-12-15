@@ -13,12 +13,12 @@ test: build
 
 realtest: build
 	@cp go/test_log.txt go/realtest.txt
-	@cd go/ && ./logcleaner realtest.txt 5000 "2025-06-01 00:00:00"
+	@cd go/ && ./logcleaner realtest.txt 3000 "2025-06-15 00:00:00"
 
 run: build
 	@cd go/ && ./logcleaner
 
 # macro
 everything: build test run
-#	@-git add -A
-#	@-git commit -am 'automatic update'
+	@-git add -A
+	@-git commit -am 'automatic update'

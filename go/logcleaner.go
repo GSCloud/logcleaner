@@ -12,10 +12,10 @@ import (
 )
 
 // CLEANLOG - CONTAINS MAIN LOGIC
+// cleanLog performs the core log file trimming and filtering operations
 
-// cleanLog performs the core log file trimming and filtering operations.
 // path: file path to the log
-// maxRows: max number of rows to keep
+// maxRows: max number of lines to keep
 // dateFormat: date string for filtration. If invalid, date filtering is skipped.
 func cleanLog(path string, maxRows int, dateFormat string) error {
 	// 1. Create a backup file with a timestamp
@@ -94,7 +94,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 				// Case 2: Continuation line (no valid date OR failed date check) that follows a kept line.
 				// Append this line to the preceding kept line, using a single space as separator.
 				// The index remains the same as we modify the last element, not add a new one.
-				filteredLines[lastKeptIndex] += " " + line // <-- Changed "\n" to " "
+				filteredLines[lastKeptIndex] += " " + line
 			}
 			// Case 3: Line that failed date filter and is not following a kept line is discarded.
 		}
@@ -103,7 +103,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 		fmt.Printf("Date filter applied: keeping entries newer than %s. Original lines: %d, kept entries: %d.\n", dateFormat, len(allLines), len(filteredLines))
 	}
 
-	// 6. Trim the filtered entries (which may contain multiline content) to max rows
+	// 6. Trim the filtered entries (which may contain multiline content) to max_lines
 	var finalLines []string
 	if len(filteredLines) > maxRows {
 		// Keep only the last 'maxRows' entries (each entry can be multiline).
@@ -135,7 +135,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 
 	// 8. Atomic move - temporary file replaces the original log
 	if err = os.Rename(tempPath, path); err != nil {
-		fmt.Printf("Error when renaming temporary file, restoring backup: %v\n", err)
+		fmt.Printf("error renaming temporary file, restoring backup: %v\n", err)
 		os.Rename(backupPath, path) // try to fix it
 		return fmt.Errorf("atomic move failed: %v", err)
 	}
@@ -156,7 +156,7 @@ func main() {
 		Short:   "Minimalistic tool for rotating and cleaning logs.",
 		Long:    "LOGCLEANER is designed to maintain optimal log file size by precisely truncating a specified log file. It retains only the desired number of the most recent lines, allowing filtering up to a designated date in the past. This makes it easy to drop outdated log entries and ensure your logs remain current and manageable.\n",
 		Use:     "\tlogcleaner <log_path> <max_lines> <date_format>",
-		Example: "\tlogcleaner /path/messages.txt 500 \"2025-01-02 15:04:05\"",
+		Example: "\tlogcleaner /path/messages.txt 5000 \"2025-01-15 15:04:05\"",
 		// silencing Cobra parameters
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -184,12 +184,12 @@ func main() {
 			// Validate max_lines is positive
 			if rows <= 0 {
 				// Error: Invalid argument value
-				return fmt.Errorf("error: maximum number of rows must be a positive number")
+				return fmt.Errorf("error: maximum number of lines must be a positive number")
 			}
 
 			// run main logic
 			if err := cleanLog(path, rows, format); err != nil {
-				return fmt.Errorf("Error while cleaning the log file: %w", err)
+				return fmt.Errorf("error while cleaning the log file: %w", err)
 			}
 			return nil
 		},
