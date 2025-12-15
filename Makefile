@@ -18,6 +18,7 @@ realtest: build
 	@cd go/ && ./logcleaner realtest.txt 3000 "2025-06-15 00:00:00"
 
 run: build
+	@echo "\n\n"
 	@cd go/ && ./logcleaner
 
 # macro
