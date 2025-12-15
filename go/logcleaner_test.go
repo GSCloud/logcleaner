@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -179,5 +180,60 @@ func TestArgs_StandardCobraBehavior(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "logcleaner [log_path]") {
 		t.Errorf("Expected help output (Usage), but found: %s", out)
+	}
+}
+
+// Test with date filtering using a real log file.
+func TestCleanLog_WithDateFilter(t *testing.T) {
+	// Path to the source log file
+	srcLogPath := "test_log.txt"
+
+	// Create a temporary directory for the test
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	// Copy the source log to the temporary directory
+	srcFile, err := os.Open(srcLogPath)
+	if err != nil {
+		t.Fatalf("Failed to open source log file: %v", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(logPath)
+	if err != nil {
+		t.Fatalf("Failed to create temporary log file: %v", err)
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		t.Fatalf("Failed to copy log file for test: %v", err)
+	}
+
+	// Define test parameters
+	maxRows := 100
+	minDateStr := "2025-08-01 00:00:00"
+
+	// Run cleanLog on the temporary log file
+	if err := cleanLog(logPath, maxRows, minDateStr); err != nil {
+		t.Fatalf("cleanLog with date filter failed: %v", err)
+	}
+
+	// Read the content of the cleaned log file
+	cleanedContent, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("Could not read cleaned log file: %v", err)
+	}
+
+	// Verify that the content is as expected
+	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
+	expectedLineCount := 100 // After filtering, the remaining lines are more than 100, so it should be trimmed to 100.
+	if len(lines) != expectedLineCount {
+		t.Errorf("Expected %d lines after date filtering, but got %d", expectedLineCount, len(lines))
+	}
+
+	// Optional: Check the date of the first line to be sure
+	firstLine := lines[0]
+	if !strings.HasPrefix(firstLine, "2025-10-26") {
+		t.Errorf("Expected first line to be from 2025-10-26, but got: %s", firstLine)
 	}
 }

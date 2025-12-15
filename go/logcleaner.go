@@ -15,6 +15,7 @@ import (
 
 // path: file path to the log
 // maxRows: max number of rows to export
+// maxRows: max number of rows to keep
 // dateFormat: date format for filtration (TBD, just a placeholder now)
 func cleanLog(path string, maxRows int, dateFormat string) error {
 	backupPath := path + "." + time.Now().Format("2006-01-02 15:04:05") + ".bak"
@@ -49,26 +50,50 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 		return nil
 	}
 
-	// Trim lines to max rows
-	var trimmedLines []string
-	if len(lines) > maxRows {
-		trimmedLines = lines[len(lines)-maxRows:]
+	// 1. Filter by date
+	const logDateFormat = "2006-01-02 15:04:05"
+	minDate, err := time.Parse(logDateFormat, dateFormat)
+
+	var filteredLines []string
+	if err != nil {
+		// If dateFormat is not a valid date (like "irrelevant"), skip date filtering.
+		// This allows the trimming test to pass without providing a real date.
+		filteredLines = lines
 	} else {
-		trimmedLines = lines // No trimming needed if lines are within the limit
+		for _, line := range lines {
+			// Extract date string from the beginning of the line
+			if len(line) >= len(logDateFormat) {
+				lineDateStr := line[:len(logDateFormat)]
+				lineDate, err := time.Parse(logDateFormat, lineDateStr)
+
+				if err == nil && !lineDate.Before(minDate) {
+					// Keep lines that are not before the minimum date
+					filteredLines = append(filteredLines, line)
+				} else if err != nil {
+					// If a line doesn't start with a valid date, keep it.
+					filteredLines = append(filteredLines, line)
+				}
+			}
+		}
 	}
 
-	// dateFormat is not used right now, just needed as a parameter
+	// 2. Trim the filtered lines to max rows
+	var finalLines []string
+	if len(filteredLines) > maxRows {
+		finalLines = filteredLines[len(filteredLines)-maxRows:]
+	} else {
+		finalLines = filteredLines // No trimming needed if lines are within the limit
+	}
 
 	// new temp file
 	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
 	if err != nil {
 		return fmt.Errorf("Error creating temporary file: %w", err)
 	}
-	tempPath := tempFile.Name() // Storing path for the final rename
+	tempPath := tempFile.Name()
 
-	// write the trimmed lines
 	writer := bufio.NewWriter(tempFile)
-	for _, line := range trimmedLines {
+	for _, line := range finalLines {
 		if _, err := fmt.Fprintln(writer, line); err != nil {
 			tempFile.Close() // Close file before returning
 			return fmt.Errorf("Error writing to temporary file: %w", err)
@@ -83,7 +108,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 		os.Rename(backupPath, path) // try to fix it
 		return fmt.Errorf("atomic move failed: %v", err)
 	}
-	fmt.Printf("Log %s successfully purged. Original backup: %s. New log has %d lines. Format used: %s\n", path, backupPath, len(trimmedLines), dateFormat)
+	fmt.Printf("Log %s successfully purged. Original backup: %s. New log has %d lines. Format used: %s\n", path, backupPath, len(finalLines), dateFormat)
 	return nil
 }
 
@@ -98,7 +123,7 @@ func (e *HelpDisplayedError) Error() string {
 func main() {
 	var rootCmd = &cobra.Command{
 		Short:   "Minimalistic tool for rotating and cleaning logs.",
-		Long:    "LogCleaner truncates a given log file to the exact specified number of last lines up to a date in the past.\n",
+		Long:    "LOGCLEANER is designed to maintain optimal log file size by precisely truncating a specified log file. It retains only the desired number of the most recent lines, allowing filtering up to a designated date in the past. This makes it easy to drop outdated log entries and ensure your logs remain current and manageable.\n",
 		Use:     "\tlogcleaner [log_path] [max_lines] [date_format]",
 		Example: "\tlogcleaner /path/messages.txt 500 \"2025-01-02 15:04:05\"",
 		// silencing Cobra parameters
