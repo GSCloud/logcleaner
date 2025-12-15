@@ -6,13 +6,14 @@ all:
 build:
 	@echo "Building app ..."
 	@cd go/ && go build -o logcleaner .
+	@echo "Done."
 
 test: build
 	@cd go/ && go test -v .
 
 realtest: build
 	@cp go/test_log.txt go/realtest.txt
-	@cd go/ && ./logcleaner realtest.txt 100 "2025-01-01 00:00:00"
+	@cd go/ && ./logcleaner realtest.txt 5000 "2025-06-01 00:00:00"
 
 run: build
 	@cd go/ && ./logcleaner
