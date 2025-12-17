@@ -38,44 +38,44 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer source.Close()
-
 	destination, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer destination.Close()
-
 	_, err = io.Copy(destination, source)
 	return err
 }
 
-// rollback ensures that the original log is restored safely using a double-backup strategy
+// rollback - ensure that the original log is restored safely using a double-backup strategy
 func rollback(originalPath, backupPath string) {
-	fmt.Printf("%sRollback initiated: Restoring %s from %s...%s\n", ColorYellow, originalPath, backupPath, ColorReset)
-
+	fmt.Printf("%srollback initiated: restoring %s from %s%s\n", ColorBlue, originalPath, backupPath, ColorReset)
 	doubleBak := backupPath + ".bak"
 
-	// 1. Create .bak.bak (safety copy of our only good backup)
+	// 1. create .bak.bak (safety copy)
 	if err := copyFile(backupPath, doubleBak); err != nil {
-		fmt.Printf("%sRollback critical failure: Could not create safety copy %s: %v%s\n", ColorRed, doubleBak, err, ColorReset)
+		fmt.Printf("%srollback critical failure: could not create safety copy %s: %v%s\n", ColorRed, doubleBak, err, ColorReset)
 		return
 	}
 
-	// 2. Move .bak to original position (this might consume the .bak)
+	// 2. move .bak to original position (this might consume the .bak)
 	if err := os.Rename(backupPath, originalPath); err != nil {
-		fmt.Printf("%sRollback failed: Could not move backup back to %s: %v%s\n", ColorRed, originalPath, err, ColorReset)
+		fmt.Printf("%srollback failed: could not move backup back to %s: %v%s\n", ColorRed, originalPath, err, ColorReset)
 		return
 	}
 
-	// 3. Move .bak.bak to .bak to satisfy the "always keep a backup" rule
+	// 3. move .bak.bak to .bak to satisfy the "always keep a backup" rule
 	if err := os.Rename(doubleBak, backupPath); err != nil {
-		fmt.Printf("%sRollback warning: Original restored, but failed to preserve .bak from .bak.bak: %v%s\n", ColorYellow, err, ColorReset)
+		fmt.Printf("%srollback warning: original restored, but failed to preserve backup: %v%s\n", ColorYellow, err, ColorReset)
 	}
+
+	// 4. finished
+	fmt.Printf("%srollback finished!%s\n", ColorGreen, ColorReset)
 }
 
 // CLEANLOG - CONTAINS MAIN LOGIC
 func cleanLog(path string, maxRows int, dateFormat string) error {
-	// 1. Create a backup file with a timestamp
+	// 1. create a backup file with a timestamp
 	backupPath := fmt.Sprintf("%s.%s.bak", path, time.Now().Format("2006-01-02-15-04-05"))
 	if err := copyFile(path, backupPath); err != nil {
 		return fmt.Errorf("error creating backup of %s to %s: %w", path, backupPath, err)
@@ -109,7 +109,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	}
 
 	if len(allLines) == 0 {
-		fmt.Printf("Log %s is empty.\n", path)
+		fmt.Printf("%sLog %s is empty.%s\n", ColorYellow, path, ColorReset)
 		return nil
 	}
 
@@ -122,7 +122,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 
 	if dateParseErr != nil {
 		filteredLines = allLines
-		fmt.Printf("Date filter skipped: '%s' is not valid. Trimming only by line count.\n", dateFormat)
+		fmt.Printf("%sdate filter skipped: '%s' is not valid, trimming only by line count%s\n", ColorYellow, dateFormat, ColorReset)
 	} else {
 		for _, line := range allLines {
 			var err error
@@ -178,10 +178,10 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	// 7. Atomic move
 	if err = os.Rename(tempPath, path); err != nil {
 		operationFailed = true
-		return fmt.Errorf("atomic move failed: %v", err)
+		return fmt.Errorf("error: atomic move failed: %w", err)
 	}
 
-	fmt.Printf("%sLog %s purged. Backup kept at: %s. Entries: %d.%s\n", ColorGreen, path, backupPath, len(finalLines), ColorReset)
+	fmt.Printf("%sLog %s purged. Backup copy at: %s. Entries: %d.%s\n", ColorGreen, path, backupPath, len(finalLines), ColorReset)
 	return nil
 }
 
@@ -191,13 +191,14 @@ func (e *HelpDisplayedError) Error() string { return "" }
 
 func main() {
 	var rootCmd = &cobra.Command{
-		Short:         "LOGCLEANER - a minimalistic tool for truncating and cleaning logs.",
-		Long:          "LOGCLEANER is designed to maintain optimal log file size by precisely truncating a specified log file by lines, datetime stamp and content filtering.",
-		Use:           ColorBold + "\nlogcleaner <log_path> <max_lines> <date_format>" + ColorReset,
-		Example:       ColorBold + "\nlogcleaner ./messages.txt 5000 \"2025-01-15 15:04:05\"" + ColorReset,
+		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a minimalistic tool for truncating and cleaning logs.",
+		Long:          ColorBold + "LOGCLEANER" + ColorReset + " is designed to maintain optimal log file size by precisely truncating a specified log file by lines, datetime stamp and content filtering.",
+		Use:           ColorBold + "\tlogcleaner <log_path> ml=<max_lines> df=<date_format>" + ColorReset,
+		Example:       ColorBold + "\tlogcleaner /var/log/Apache2/access.log ml=5000 df=\"2006-01-02 15:04:05\"" + ColorReset,
 		Version:       VERSION,
 		SilenceErrors: true,
 		SilenceUsage:  true,
+
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 3 {
 				cmd.Help()
@@ -212,12 +213,11 @@ func main() {
 
 			rows, err := strconv.Atoi(rowsStr)
 			if err != nil {
-				return fmt.Errorf("error: 'max_lines' must be a number")
+				return fmt.Errorf("error: max_lines must be a number")
 			}
 			if rows <= 0 {
-				return fmt.Errorf("error: maximum number of lines must be positive")
+				return fmt.Errorf("error: max_lines must be a positive number")
 			}
-
 			return cleanLog(path, rows, format)
 		},
 	}
@@ -226,7 +226,7 @@ func main() {
 		if _, ok := err.(*HelpDisplayedError); ok {
 			os.Exit(0)
 		}
-		fmt.Fprintf(os.Stderr, "%s%v%s\n", ColorRed, err, ColorReset)
+		fmt.Fprintf(os.Stderr, "%s%s%v%s\n", ColorRed, ColorBold, err, ColorReset)
 		os.Exit(1)
 	}
 }

@@ -24,7 +24,7 @@
 | --- | --- | ---
 | **log_path | Absolute or relative path to the log file. | Required
 | **ml** | Maximum number of lines to retain. | Required
-| **df** | Date Format: Golang style time format (time#Parse). | Required
+| **df** | Date Format: Golang style time format [time#Layout](https://pkg.go.dev/time#Layout). | Required
 | **fs** | Filter Stub: Only keep lines containing this string (can be used multiple times). | Optional
 
 ## 💡 Examples
