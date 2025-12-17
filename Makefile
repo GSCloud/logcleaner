@@ -15,11 +15,11 @@ test: build
 realtest: build
 	@echo "Testing app on pseudo-real data ...\n"
 	@cp go/test_log.txt go/realtest.txt
-	@cd go/ && ./logcleaner realtest.txt 3000 "2025-06-15 00:00:00"
+	@cd go/ && ./logcleaner realtest.txt --lines 3000 --date "2025-06-15" --format "2006-01-02"
 
 run: build
 	@echo "\n"
-	@cd go/ && ./logcleaner
+	@cd go/ && ./logcleaner --help
 
 # macro
 everything: build test realtest run

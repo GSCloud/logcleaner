@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -74,11 +74,11 @@ func rollback(originalPath, backupPath string) {
 }
 
 // CLEANLOG - CONTAINS MAIN LOGIC
-func cleanLog(path string, maxRows int, dateFormat string) error {
+func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, filter []string) error {
 	// 1. create a backup file with a timestamp
 	backupPath := fmt.Sprintf("%s.%s.bak", path, time.Now().Format("2006-01-02-15-04-05"))
 	if err := copyFile(path, backupPath); err != nil {
-		return fmt.Errorf("error creating backup of %s to %s: %w", path, backupPath, err)
+		return fmt.Errorf("failed to create backup of %s to %s: %w", path, backupPath, err)
 	}
 
 	// Flag to track success for potential rollback
@@ -93,7 +93,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	file, err := os.Open(backupPath)
 	if err != nil {
 		operationFailed = true
-		return fmt.Errorf("error opening backup file %s: %w", backupPath, err)
+		return fmt.Errorf("failed to open backup file %s: %w", backupPath, err)
 	}
 	defer file.Close()
 
@@ -105,7 +105,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	}
 	if err := scanner.Err(); err != nil {
 		operationFailed = true
-		return fmt.Errorf("error reading backup file: %w", err)
+		return fmt.Errorf("failed to read backup file: %w", err)
 	}
 
 	if len(allLines) == 0 {
@@ -114,24 +114,24 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	}
 
 	// 4. Date Filtering Logic
-	const logDateFormat = "2006-01-02 15:04:05"
-	minDate, dateParseErr := time.Parse(logDateFormat, dateFormat)
+	const logLineDateFormat = "2006-01-02 15:04:05" // Assumed format for dates within the log file
+	minDate, dateParseErr := time.Parse(dateFormat, minDateStr)
 
 	var filteredLines []string
 	lastKeptIndex := -1
 
-	if dateParseErr != nil {
+	if minDateStr == "" || dateParseErr != nil {
 		filteredLines = allLines
-		fmt.Printf("%sdate filter skipped: '%s' is not valid, trimming only by line count%s\n", ColorYellow, dateFormat, ColorReset)
+		fmt.Printf("%sdate filter skipped: trimming only by line count%s\n", ColorYellow, ColorReset)
 	} else {
 		for _, line := range allLines {
 			var err error
 			var lineDate time.Time
 			isMainLogLine := false
 
-			if len(line) >= len(logDateFormat) {
-				lineDateStr := line[:len(logDateFormat)]
-				lineDate, err = time.Parse(logDateFormat, lineDateStr)
+			if len(line) >= len(logLineDateFormat) {
+				lineDateStr := line[:len(logLineDateFormat)]
+				lineDate, err = time.Parse(logLineDateFormat, lineDateStr)
 				if err == nil {
 					if !lineDate.Before(minDate) {
 						isMainLogLine = true
@@ -148,6 +148,24 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 		}
 	}
 
+	// 4a. Content filtering
+	if len(filter) > 0 {
+		var contentFilteredLines []string
+		for _, line := range filteredLines {
+			keep := false
+			for _, stub := range filter {
+				if strings.Contains(line, stub) {
+					keep = true
+					break
+				}
+			}
+			if keep {
+				contentFilteredLines = append(contentFilteredLines, line)
+			}
+		}
+		filteredLines = contentFilteredLines
+	}
+
 	// 5. Trim to max_lines
 	var finalLines []string
 	if len(filteredLines) > maxRows {
@@ -160,7 +178,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
 	if err != nil {
 		operationFailed = true
-		return fmt.Errorf("error creating temporary file: %w", err)
+		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	tempPath := tempFile.Name()
 
@@ -169,7 +187,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 		if _, err := fmt.Fprintln(writer, line); err != nil {
 			tempFile.Close()
 			operationFailed = true
-			return fmt.Errorf("error writing to temporary file: %w", err)
+			return fmt.Errorf("failed to write to temporary file: %w", err)
 		}
 	}
 	writer.Flush()
@@ -178,7 +196,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	// 7. Atomic move
 	if err = os.Rename(tempPath, path); err != nil {
 		operationFailed = true
-		return fmt.Errorf("error: atomic move failed: %w", err)
+		return fmt.Errorf("atomic move failed: %w", err)
 	}
 
 	fmt.Printf("%sLog %s purged. Backup copy at: %s. Entries: %d.%s\n", ColorGreen, path, backupPath, len(finalLines), ColorReset)
@@ -190,37 +208,46 @@ type HelpDisplayedError struct{}
 func (e *HelpDisplayedError) Error() string { return "" }
 
 func main() {
+	var (
+		lines  int
+		date   string
+		format string
+		filter []string
+	)
+
 	var rootCmd = &cobra.Command{
 		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a minimalistic tool for truncating and cleaning logs.",
 		Long:          ColorBold + "LOGCLEANER" + ColorReset + " is designed to maintain optimal log file size by precisely truncating a specified log file by lines, datetime stamp and content filtering.",
-		Use:           ColorBold + "\tlogcleaner <log_path> --lines <max_lines> --format <date_format>" + ColorReset,
-		Example:       ColorBold + "\tlogcleaner /var/log/Apache2/access.log --lines 5000 --format \"2006-01-02 15:04:05\"" + ColorReset,
+		Use:           "logcleaner <log_path> --lines <max_lines> --date <date> --format <date_format> [--filter <string>]",
+		Example:       ColorBold + "\tlogcleaner /var/log/messages.txt --lines 1500 --date \"2025-01-01\" --format \"2006-01-02\"" + ColorReset,
 		Version:       VERSION,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 
 		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 3 {
-				cmd.Help()
-				return &HelpDisplayedError{}
+			if len(args) != 1 {
+				return fmt.Errorf("requires exactly one argument: <log_path>; type -h for Help")
 			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := args[0]
-			rowsStr := args[1]
-			format := args[2]
-
-			rows, err := strconv.Atoi(rowsStr)
-			if err != nil {
-				return fmt.Errorf("error: max_lines must be a number")
+			if lines <= 0 {
+				return fmt.Errorf("error: --lines must be a positive number")
 			}
-			if rows <= 0 {
-				return fmt.Errorf("error: max_lines must be a positive number")
+			// Validate date and format are provided together
+			if (date != "" && format == "") || (date == "" && format != "") {
+				return fmt.Errorf("error: --date and --format must be used together")
 			}
-			return cleanLog(path, rows, format)
+			return cleanLog(path, lines, date, format, filter)
 		},
 	}
+
+	rootCmd.Flags().IntVar(&lines, "lines", 0, "Maximum number of lines to retain (required)")
+	rootCmd.Flags().StringVar(&date, "date", "", "Date string to filter logs from (e.g., \"2025-01-01\")")
+	rootCmd.Flags().StringVar(&format, "format", "", "Go layout string for parsing the date (e.g., \"2006-01-02\")")
+	rootCmd.Flags().StringSliceVar(&filter, "filter", []string{}, "Keep only lines containing this string (can be used multiple times)")
+	rootCmd.MarkFlagRequired("lines")
 
 	if err := rootCmd.Execute(); err != nil {
 		if _, ok := err.(*HelpDisplayedError); ok {

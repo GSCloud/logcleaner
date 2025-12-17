@@ -33,7 +33,7 @@ func TestCleanLog_Trimming(t *testing.T) {
 		t.Fatalf("Could not create test file: %v", err)
 	}
 
-	if err := cleanLog(logPath, maxRows, "irrelevant"); err != nil {
+	if err := cleanLog(logPath, maxRows, "", "2006-01-02", nil); err != nil {
 		testError(t, fmt.Sprintf("cleanLog failed: %v", err))
 	}
 
@@ -78,7 +78,7 @@ func TestCleanLog_Empty(t *testing.T) {
 		t.Fatalf("Could not create empty log: %v", err)
 	}
 
-	if err := cleanLog(logPath, 5, "irrelevant"); err != nil {
+	if err := cleanLog(logPath, 5, "", "2006-01-02", nil); err != nil {
 		testError(t, fmt.Sprintf("cleanLog failed on empty file: %v", err))
 	}
 
@@ -95,39 +95,52 @@ func TestRunE_ArgumentErrors(t *testing.T) {
 	testLog(t, ColorCyan, "--- START: TestRunE_ArgumentErrors ---")
 
 	testRunE := func(cmd *cobra.Command, args []string) error {
-		path := args[0]
-		rowsStr := args[1]
-		format := args[2]
+		lines, _ := cmd.Flags().GetInt("lines")
+		date, _ := cmd.Flags().GetString("date")
+		format, _ := cmd.Flags().GetString("format")
 
+		// This part is simplified as cobra does the type checking
+		rowsStr := strconv.Itoa(lines)
 		rows, err := strconv.Atoi(rowsStr)
 		if err != nil {
-			return fmt.Errorf("error: second argument 'max_lines' must be a number, but was: %s", rowsStr)
+			return fmt.Errorf("error: --lines must be a number, but was: %s", rowsStr)
 		}
 		if rows <= 0 {
 			return fmt.Errorf("error: maximum number of rows must be a positive number")
 		}
 
-		_ = path
-		_ = rows
+		if (date != "" && format == "") || (date == "" && format != "") {
+			return fmt.Errorf("error: --date and --format must be used together")
+		}
+
 		_ = format
+		_ = date
 		return nil
 	}
 
 	cmd := &cobra.Command{RunE: testRunE}
+	cmd.Flags().Int("lines", 0, "")
+	cmd.Flags().String("date", "", "")
+	cmd.Flags().String("format", "", "")
 
 	// Test case helper
-	runSubTest := func(name string, args []string, expectedErrPart string) {
-		err := cmd.RunE(cmd, args)
+	runSubTest := func(name, lines, date, format, expectedErrPart string) {
+		cmd.Flags().Set("lines", lines)
+		cmd.Flags().Set("date", date)
+		cmd.Flags().Set("format", format)
+		// We pass a dummy arg because the RunE expects one
+		err := cmd.RunE(cmd, []string{"/log"})
 		if err != nil && strings.Contains(err.Error(), expectedErrPart) {
 			testLog(t, ColorGreen, fmt.Sprintf("✔ Subtest [%s] passed (Caught expected error).", name))
 		} else {
 			testError(t, fmt.Sprintf("✖ Subtest [%s] failed. Expected error containing '%s', got: %v", name, expectedErrPart, err))
 		}
 	}
-
-	runSubTest("Non-numeric ML", []string{"/log", "abc", "fmt"}, "must be a number")
-	runSubTest("Negative ML", []string{"/log", "-10", "fmt"}, "positive number")
-	runSubTest("Zero ML", []string{"/log", "0", "fmt"}, "positive number")
+	// Cobra handles non-numeric input for Int flags, so we only test logic handled in RunE
+	runSubTest("Negative ML", "-10", "", "", "positive number")
+	runSubTest("Zero ML", "0", "", "", "positive number")
+	runSubTest("Date without Format", "100", "2025-01-01", "", "must be used together")
+	runSubTest("Format without Date", "100", "", "2006-01-02", "must be used together")
 }
 
 // Test with date filtering using a real log file
@@ -147,9 +160,10 @@ func TestCleanLog_WithDateFilter(t *testing.T) {
 	os.WriteFile(logPath, data, 0644)
 
 	maxRows := 100
-	minDateStr := "2025-08-01 00:00:00"
+	minDateStr := "2025-08-01"
+	dateFormat := "2006-01-02"
 
-	if err := cleanLog(logPath, maxRows, minDateStr); err != nil {
+	if err := cleanLog(logPath, maxRows, minDateStr, dateFormat, nil); err != nil {
 		testError(t, fmt.Sprintf("cleanLog with date filter failed: %v", err))
 	}
 

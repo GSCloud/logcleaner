@@ -16,7 +16,7 @@
 
 ## 🚀 Usage
 
-        logcleaner <log_path> --lines <max_lines> --format <date_format> [--filter <filter_stub> ...]
+        logcleaner <log_path> --lines <max_lines> --date <date> --format <date_format> [--filter <filter_stub> ...]
 
 ## Parameters
 
@@ -24,6 +24,7 @@
 | --- | --- | ---
 | **log_path | Absolute or relative path to the log file. | Required
 | **--lines int** | Maximum number of lines to retain. | Required
+| **--date "string"** | Date: Date in the past. | Required
 | **--format "string"** | Date Format: Golang style time format [time#Layout](https://pkg.go.dev/time#Layout). | Required
 | **--filter "string"** | Filter Stub: Only keep lines containing this string (can be used multiple times). | Optional
 
@@ -31,15 +32,17 @@
 
 Standard cleanup (last 1500 lines):
 
-        logcleaner /var/log/apache2/messages.txt --lines 1500 --format "2025-01-20"
+        logcleaner /var/log/apache2/messages.txt --lines 1500
 
 Cleanup with specific timestamp:
 
-        logcleaner /var/log/apache2/messages.txt --lines 1500 --format "2025-01-20 15:04:05"
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --date "2025-01-01" --format "2006-01-02"
+
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --date "2025-01-01 00:00:00" --format "2006-01-02 15:04:05"
 
 Cleanup with ERROR filtering:
 
-        logcleaner /var/log/apache2/messages.txt --lines 1500 --format "2025-01-20 15:04:05" --filter "ERROR"
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --date "2025-01-01" -format "2006-01-02" --filter "ERROR"
 
 ## 🛠 Commands & Flags
 
