@@ -193,8 +193,8 @@ func main() {
 	var rootCmd = &cobra.Command{
 		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a minimalistic tool for truncating and cleaning logs.",
 		Long:          ColorBold + "LOGCLEANER" + ColorReset + " is designed to maintain optimal log file size by precisely truncating a specified log file by lines, datetime stamp and content filtering.",
-		Use:           ColorBold + "\tlogcleaner <log_path> ml=<max_lines> df=<date_format>" + ColorReset,
-		Example:       ColorBold + "\tlogcleaner /var/log/Apache2/access.log ml=5000 df=\"2006-01-02 15:04:05\"" + ColorReset,
+		Use:           ColorBold + "\tlogcleaner <log_path> --lines <max_lines> --format <date_format>" + ColorReset,
+		Example:       ColorBold + "\tlogcleaner /var/log/Apache2/access.log --lines 5000 --format \"2006-01-02 15:04:05\"" + ColorReset,
 		Version:       VERSION,
 		SilenceErrors: true,
 		SilenceUsage:  true,

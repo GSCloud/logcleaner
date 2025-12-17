@@ -16,30 +16,30 @@
 
 ## 🚀 Usage
 
-        logcleaner <log_path> ml=<max_lines> df=<date_format> [fs=<filter_stub> ...]
+        logcleaner <log_path> --lines <max_lines> --format <date_format> [--filter <filter_stub> ...]
 
 ## Parameters
 
 | Argument | Description | Requirement
 | --- | --- | ---
 | **log_path | Absolute or relative path to the log file. | Required
-| **ml** | Maximum number of lines to retain. | Required
-| **df** | Date Format: Golang style time format [time#Layout](https://pkg.go.dev/time#Layout). | Required
-| **fs** | Filter Stub: Only keep lines containing this string (can be used multiple times). | Optional
+| **--lines int** | Maximum number of lines to retain. | Required
+| **--format "string"** | Date Format: Golang style time format [time#Layout](https://pkg.go.dev/time#Layout). | Required
+| **--filter "string"** | Filter Stub: Only keep lines containing this string (can be used multiple times). | Optional
 
 ## 💡 Examples
 
 Standard cleanup (last 1500 lines):
 
-        logcleaner /var/log/apache2/messages.txt ml=1500 df="2025-01-20"
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --format "2025-01-20"
 
 Cleanup with specific timestamp:
 
-        logcleaner /var/log/apache2/messages.txt ml=1500 df="2025-01-20 15:04:05"
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --format "2025-01-20 15:04:05"
 
 Cleanup with ERROR filtering:
 
-        logcleaner /var/log/apache2/messages.txt ml=1500 df="2025-01-20 15:04:05" fs="ERROR"
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --format "2025-01-20 15:04:05" --filter "ERROR"
 
 ## 🛠 Commands & Flags
 
