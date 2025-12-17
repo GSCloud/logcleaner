@@ -45,8 +45,8 @@ Cleanup with ERROR filtering:
 
 | Flag | Action
 | --- | ---
-| **-h, --help, help** | Display help message.
-| **-v, --version, version** | Display version and build information.
+| **-h, --help** | Display help message.
+| **-v, --version** | Display version and build information.
 
 ## 📝 Technical Notes
 

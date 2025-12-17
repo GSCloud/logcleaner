@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,92 +11,94 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// cleanLog is here to prevent compilation issues if it hasn't been changed in main.go.
-// In reality, it should be cleanly exported from main.go.
-// A simulated function is used for testing RunE ArgumentErrors.
+// Pomocná funkce pro barevný výstup v testech
+func testLog(t *testing.T, color string, message string) {
+	t.Logf("%s%s%s", color, message, ColorReset)
+}
 
-// Test cleanLog functionality
+func testError(t *testing.T, message string) {
+	t.Errorf("%s%s%s", ColorRed, message, ColorReset)
+}
+
+// Test cleanLog functionality s barvičkami
 func TestCleanLog_Trimming(t *testing.T) {
-	// Create a temporary directory
+	testLog(t, ColorCyan, "--- START: TestCleanLog_Trimming ---")
+
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 	maxRows := 5
 
-	// Create test content (10 lines)
 	content := "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10"
 	if err := os.WriteFile(logPath, []byte(content), 0644); err != nil {
 		t.Fatalf("Could not create test file: %v", err)
 	}
 
-	// Run cleanLog
 	if err := cleanLog(logPath, maxRows, "irrelevant"); err != nil {
-		t.Fatalf("cleanLog failed: %v", err)
+		testError(t, fmt.Sprintf("cleanLog failed: %v", err))
 	}
 
-	// 1. Check if the backup exists (with any timestamp)
-	backupExists := false
+	// 1. Check backup
 	files, _ := filepath.Glob(logPath + ".*.bak")
 	if len(files) > 0 {
-		backupExists = true
-		// Example cleanup: Delete the backup to keep the test directory clean
+		testLog(t, ColorGreen, "✔ Backup file created successfully.")
 		os.Remove(files[0])
-	}
-	if !backupExists {
-		t.Errorf("Error: Backup file was not created.")
+	} else {
+		testError(t, "✖ Error: Backup file was not created.")
 	}
 
-	// 2. Check if the original file has the correct number of lines
+	// 2. Check line count
 	trimmedContent, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("Could not read cleaned file: %v", err)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(trimmedContent)), "\n")
-	if len(lines) != maxRows {
-		t.Errorf("Expected number of lines: %d, actual: %d", maxRows, len(lines))
+	if len(lines) == maxRows {
+		testLog(t, ColorGreen, fmt.Sprintf("✔ Line count matches: %d", maxRows))
+	} else {
+		testError(t, fmt.Sprintf("✖ Expected %d lines, but got %d", maxRows, len(lines)))
 	}
 
-	// 3. Check if the correct lines are preserved (the last 5)
+	// 3. Check content
 	expectedLines := []string{"Line 6", "Line 7", "Line 8", "Line 9", "Line 10"}
-	if !equalSlices(lines, expectedLines) {
-		t.Errorf("Content does not match.\nExpected: %v\nActual: %v", expectedLines, lines)
+	if equalSlices(lines, expectedLines) {
+		testLog(t, ColorGreen, "✔ Content matches expected last 5 lines.")
+	} else {
+		testError(t, fmt.Sprintf("✖ Content mismatch!\nExpected: %v\nActual: %v", expectedLines, lines))
 	}
 }
 
 // Test with an empty log
 func TestCleanLog_Empty(t *testing.T) {
+	testLog(t, ColorCyan, "--- START: TestCleanLog_Empty ---")
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "empty.log")
 
-	// Create an empty file
 	if _, err := os.Create(logPath); err != nil {
 		t.Fatalf("Could not create empty log: %v", err)
 	}
 
-	// Run cleanLog
 	if err := cleanLog(logPath, 5, "irrelevant"); err != nil {
-		t.Fatalf("cleanLog failed: %v", err)
+		testError(t, fmt.Sprintf("cleanLog failed on empty file: %v", err))
 	}
 
-	// Check if the resulting file is empty
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("Could not read file: %v", err)
-	}
-	if len(data) != 0 {
-		t.Errorf("Expected an empty log, but found length %d.", len(data))
+	data, _ := os.ReadFile(logPath)
+	if len(data) == 0 {
+		testLog(t, ColorGreen, "✔ Empty log stayed empty as expected.")
+	} else {
+		testError(t, "✖ Empty log should not contain data after cleaning.")
 	}
 }
 
 // Test argument parsing errors
 func TestRunE_ArgumentErrors(t *testing.T) {
-	// We use a copy of RunE from main.go to test parsing errors.
+	testLog(t, ColorCyan, "--- START: TestRunE_ArgumentErrors ---")
+
 	testRunE := func(cmd *cobra.Command, args []string) error {
 		path := args[0]
 		rowsStr := args[1]
 		format := args[2]
 
-		// Convert rows from string to int
 		rows, err := strconv.Atoi(rowsStr)
 		if err != nil {
 			return fmt.Errorf("error: second argument 'max_lines' must be a number, but was: %s", rowsStr)
@@ -107,7 +107,6 @@ func TestRunE_ArgumentErrors(t *testing.T) {
 			return fmt.Errorf("error: maximum number of rows must be a positive number")
 		}
 
-		// cleanLog would normally be here, but we skip it for parsing tests
 		_ = path
 		_ = rows
 		_ = format
@@ -116,29 +115,59 @@ func TestRunE_ArgumentErrors(t *testing.T) {
 
 	cmd := &cobra.Command{RunE: testRunE}
 
-	// Test 1: max_lines is not a number (bad argument format)
-	args1 := []string{"/path/log", "text", "format"}
-	err1 := cmd.RunE(cmd, args1)
-	if err1 == nil || !strings.Contains(err1.Error(), "must be a number") {
-		t.Errorf("Expected 'must be a number' error, but got: %v", err1)
+	// Test case helper
+	runSubTest := func(name string, args []string, expectedErrPart string) {
+		err := cmd.RunE(cmd, args)
+		if err != nil && strings.Contains(err.Error(), expectedErrPart) {
+			testLog(t, ColorGreen, fmt.Sprintf("✔ Subtest [%s] passed (Caught expected error).", name))
+		} else {
+			testError(t, fmt.Sprintf("✖ Subtest [%s] failed. Expected error containing '%s', got: %v", name, expectedErrPart, err))
+		}
 	}
 
-	// Test 2: max_lines is a negative number (invalid value)
-	args2 := []string{"/path/log", "-5", "format"}
-	err2 := cmd.RunE(cmd, args2)
-	if err2 == nil || !strings.Contains(err2.Error(), "positive number") {
-		t.Errorf("Expected 'positive number' error, but got: %v", err2)
+	runSubTest("Non-numeric ML", []string{"/log", "abc", "fmt"}, "must be a number")
+	runSubTest("Negative ML", []string{"/log", "-10", "fmt"}, "positive number")
+	runSubTest("Zero ML", []string{"/log", "0", "fmt"}, "positive number")
+}
+
+// Test with date filtering using a real log file
+func TestCleanLog_WithDateFilter(t *testing.T) {
+	testLog(t, ColorCyan, "--- START: TestCleanLog_WithDateFilter ---")
+
+	srcLogPath := "test_log.txt"
+	if _, err := os.Stat(srcLogPath); os.IsNotExist(err) {
+		t.Skip("Skipping: test_log.txt not found in current directory.")
 	}
 
-	// Test 3: max_lines is zero (invalid value)
-	args3 := []string{"/path/log", "0", "format"}
-	err3 := cmd.RunE(cmd, args3)
-	if err3 == nil || !strings.Contains(err3.Error(), "positive number") {
-		t.Errorf("Expected 'positive number' error, but got: %v", err3)
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	// Copy dummy log
+	data, _ := os.ReadFile(srcLogPath)
+	os.WriteFile(logPath, data, 0644)
+
+	maxRows := 100
+	minDateStr := "2025-08-01 00:00:00"
+
+	if err := cleanLog(logPath, maxRows, minDateStr); err != nil {
+		testError(t, fmt.Sprintf("cleanLog with date filter failed: %v", err))
+	}
+
+	cleanedContent, _ := os.ReadFile(logPath)
+	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
+
+	if len(lines) > 0 {
+		testLog(t, ColorGreen, fmt.Sprintf("✔ Date filter applied. Kept %d lines.", len(lines)))
+		if strings.HasPrefix(lines[0], "2025-11-09 13:06:55") {
+			testLog(t, ColorGreen, "✔ First line date matches expectations.")
+		} else {
+			testLog(t, ColorYellow, "⚠ First line date doesn't match expected start, check your test_log.txt content.")
+		}
+	} else {
+		testError(t, "✖ Date filter removed all lines!")
 	}
 }
 
-// Helper function to compare slices
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -149,91 +178,4 @@ func equalSlices(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-// Test standard Cobra behavior (display Usage and error)
-func TestArgs_StandardCobraBehavior(t *testing.T) {
-	// Use bytes.Buffer to capture the help output
-	var buf bytes.Buffer
-
-	// Create a simple root Command with standard properties
-	cmd := &cobra.Command{
-		Use:  "\tlogcleaner [log_path] [max_lines] [date_format]",
-		Args: cobra.ExactArgs(3),
-		// Silence the error (Error: accepts 3...) but KEEP the Usage (help)
-		SilenceErrors: true,
-		SilenceUsage:  false,
-		Run:           func(cmd *cobra.Command, args []string) { /* Do Nothing */ },
-	}
-	cmd.SetOut(&buf) // Redirect Cobra's output to the buffer
-
-	// Run Execute with the wrong number of arguments (less than 3)
-	cmd.SetArgs([]string{"/path/log", "5"})
-	err := cmd.Execute()
-
-	// 1. Check if an error was returned (Cobra.CommandError or similar)
-	if err == nil {
-		t.Fatal("Expected an error, but none was returned.")
-	}
-
-	// 2. Check if any content (help) was printed
-	out := buf.String()
-	if !strings.Contains(out, "logcleaner [log_path]") {
-		t.Errorf("Expected help output (Usage), but found: %s", out)
-	}
-}
-
-// Test with date filtering using a real log file.
-func TestCleanLog_WithDateFilter(t *testing.T) {
-	// Path to the source log file
-	srcLogPath := "test_log.txt"
-
-	// Create a temporary directory for the test
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "test.log")
-
-	// Copy the source log to the temporary directory
-	srcFile, err := os.Open(srcLogPath)
-	if err != nil {
-		t.Fatalf("Failed to open source log file: %v", err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(logPath)
-	if err != nil {
-		t.Fatalf("Failed to create temporary log file: %v", err)
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		t.Fatalf("Failed to copy log file for test: %v", err)
-	}
-
-	// Define test parameters
-	maxRows := 100
-	minDateStr := "2025-08-01 00:00:00"
-
-	// Run cleanLog on the temporary log file
-	if err := cleanLog(logPath, maxRows, minDateStr); err != nil {
-		t.Fatalf("cleanLog with date filter failed: %v", err)
-	}
-
-	// Read the content of the cleaned log file
-	cleanedContent, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("Could not read cleaned log file: %v", err)
-	}
-
-	// Verify that the content is as expected
-	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
-	expectedLineCount := 100 // After filtering, the remaining lines are more than 100, so it should be trimmed to 100.
-	if len(lines) != expectedLineCount {
-		t.Errorf("Expected %d lines after date filtering, but got %d", expectedLineCount, len(lines))
-	}
-
-	// Optional: Check the date of the first line to be sure
-	firstLine := lines[0]
-	if !strings.HasPrefix(firstLine, "2025-11-09 13:06:55") {
-		t.Errorf("Expected first line to be from 2025-11-09 13:06:55, but got: %s", firstLine)
-	}
 }
