@@ -100,6 +100,9 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 	// 3. Read all lines
 	var allLines []string
 	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	// make a bigger buffer
+	scanner.Buffer(buf, 1024*1024)
 	for scanner.Scan() {
 		allLines = append(allLines, scanner.Text())
 	}
@@ -108,6 +111,7 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 		return fmt.Errorf("failed to read backup file: %w", err)
 	}
 
+	// empty log
 	if len(allLines) == 0 {
 		fmt.Printf("%sLog %s is empty.%s\n", ColorYellow, path, ColorReset)
 		return nil
@@ -216,10 +220,12 @@ func main() {
 	)
 
 	var rootCmd = &cobra.Command{
-		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a minimalistic tool for truncating and cleaning logs.",
-		Long:          ColorBold + "LOGCLEANER" + ColorReset + " is designed to maintain optimal log file size by precisely truncating a specified log file by lines, datetime stamp and content filtering.",
-		Use:           "logcleaner <log_path> --lines <max_lines> --date <date> --format <date_format> [--filter <string>]",
-		Example:       ColorBold + "\tlogcleaner /var/log/messages.txt --lines 1500 --date \"2025-01-01\" --format \"2006-01-02\"" + ColorReset,
+		Short: ColorBold + "LOGCLEANER" + ColorReset + " - a minimalistic tool for truncating and cleaning logs.",
+		Long:  ColorBold + "LOGCLEANER" + ColorReset + " is designed to maintain optimal log file size by precisely truncating a specified log file by lines, datetime stamp and content filtering.",
+		Use:   "logcleaner <log_path> --lines <max_lines> --date <date> --format <date_format> [--filter <string>]",
+		Example: fmt.Sprintf(`%s	logcleaner /var/log/messages.txt --lines 1500
+	logcleaner /var/log/messages.txt --lines 1500 --date "2025-01-01" --format "2006-01-02"
+	logcleaner /var/log/messages.txt --lines 1500 --date "2025-01-01" --format "2006-01-02" --filter "ERROR"%s`, ColorBold, ColorReset),
 		Version:       VERSION,
 		SilenceErrors: true,
 		SilenceUsage:  true,
