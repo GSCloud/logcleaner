@@ -33,17 +33,26 @@ func TestCleanLog_Trimming(t *testing.T) {
 		t.Fatalf("Could not create test file: %v", err)
 	}
 
+	// Prevent failures from previous runs by cleaning up old backups first
+	oldBackups, _ := filepath.Glob(logPath + ".*.bak")
+	for _, f := range oldBackups {
+		os.Remove(f)
+	}
+
 	if err := cleanLog(logPath, maxRows, "", "2006-01-02", nil); err != nil {
 		testError(t, fmt.Sprintf("cleanLog failed: %v", err))
 	}
 
 	// 1. Check backup
-	files, _ := filepath.Glob(logPath + ".*.bak")
-	if len(files) > 0 {
+	files, err := filepath.Glob(logPath + ".*.bak")
+	if err != nil {
+		t.Fatalf("Error checking for backup file: %v", err)
+	}
+	if len(files) == 1 {
 		testLog(t, ColorGreen, "✔ Backup file created successfully.")
 		os.Remove(files[0])
 	} else {
-		testError(t, "✖ Error: Backup file was not created.")
+		testError(t, fmt.Sprintf("✖ Error: Expected 1 backup file, but found %d.", len(files)))
 	}
 
 	// 2. Check line count
@@ -159,9 +168,9 @@ func TestCleanLog_WithDateFilter(t *testing.T) {
 	data, _ := os.ReadFile(srcLogPath)
 	os.WriteFile(logPath, data, 0644)
 
-	maxRows := 100
-	minDateStr := "2025-08-01"
-	dateFormat := "2006-01-02"
+	maxRows := 1000 // Must be > expectedLineCount to test date filtering properly
+	minDateStr := "2025-08-01 00:00:00"
+	dateFormat := "2006-01-02 15:04:05"
 
 	if err := cleanLog(logPath, maxRows, minDateStr, dateFormat, nil); err != nil {
 		testError(t, fmt.Sprintf("cleanLog with date filter failed: %v", err))
@@ -170,15 +179,36 @@ func TestCleanLog_WithDateFilter(t *testing.T) {
 	cleanedContent, _ := os.ReadFile(logPath)
 	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
 
-	if len(lines) > 0 {
-		testLog(t, ColorGreen, fmt.Sprintf("✔ Date filter applied. Kept %d lines.", len(lines)))
-		if strings.HasPrefix(lines[0], "2025-11-09 13:06:55") {
-			testLog(t, ColorGreen, "✔ First line date matches expectations.")
-		} else {
-			testLog(t, ColorYellow, "⚠ First line date doesn't match expected start, check your test_log.txt content.")
-		}
+	// Expected results based on test_log.txt and minDateStr "2025-08-01"
+	// This will need adjustment if test_log.txt changes.
+	expectedLineCount := 891
+	expectedFirstLinePrefix := "2025-08-01 00:17:15"
+	expectedLastLinePrefix := "2025-11-25 21:53:32"
+
+	if len(lines) != expectedLineCount {
+		testError(t, fmt.Sprintf("✖ Expected %d lines after date filter, but got %d.", expectedLineCount, len(lines)))
 	} else {
+		testLog(t, ColorGreen, fmt.Sprintf("✔ Date filter applied. Kept %d lines as expected.", len(lines)))
+	}
+
+	if len(lines) == 0 {
 		testError(t, "✖ Date filter removed all lines!")
+		return
+	}
+
+	if !strings.HasPrefix(lines[0], expectedFirstLinePrefix) {
+		testError(t, fmt.Sprintf("✖ First line prefix mismatch. Expected: '%s', Got: '%s'", expectedFirstLinePrefix, lines[0]))
+		fmt.Printf("\n")
+		fmt.Printf("1. %s\n", lines[0])
+		fmt.Printf("2. %s\n", lines[1])
+		fmt.Printf("3. %s\n", lines[2])
+		fmt.Printf("4. %s\n", lines[3])
+		fmt.Printf("5. %s\n", lines[4])
+		fmt.Printf("\n")
+	}
+
+	if !strings.HasPrefix(lines[len(lines)-1], expectedLastLinePrefix) {
+		testError(t, fmt.Sprintf("✖ Last line prefix mismatch. Expected: '%s', Got: '%s'", expectedLastLinePrefix, lines[len(lines)-1]))
 	}
 }
 
