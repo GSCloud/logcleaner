@@ -223,6 +223,9 @@ func main() {
 		Version:       VERSION,
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			fmt.Println(cmd.Short)
+		},
 
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
@@ -247,13 +250,15 @@ func main() {
 	rootCmd.Flags().StringVar(&date, "date", "", "Date string to filter logs from (e.g., \"2025-01-01\")")
 	rootCmd.Flags().StringVar(&format, "format", "", "Go layout string for parsing the date (e.g., \"2006-01-02\")")
 	rootCmd.Flags().StringSliceVar(&filter, "filter", []string{}, "Keep only lines containing this string (can be used multiple times)")
+	rootCmd.SetVersionTemplate(fmt.Sprintf("%s\nVersion: {{.Version}}\n", rootCmd.Short))
 	rootCmd.MarkFlagRequired("lines")
 
 	if err := rootCmd.Execute(); err != nil {
 		if _, ok := err.(*HelpDisplayedError); ok {
 			os.Exit(0)
 		}
-		fmt.Fprintf(os.Stderr, "%s%s%v%s\n", ColorRed, ColorBold, err, ColorReset)
+		fmt.Println(rootCmd.Short)
+		fmt.Fprintf(os.Stderr, "%s%sError: %v%s\n", ColorRed, ColorBold, err, ColorReset)
 		os.Exit(1)
 	}
 }

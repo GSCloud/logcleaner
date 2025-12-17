@@ -5,7 +5,7 @@ all:
 
 build:
 	@echo "Building app ...\n"
-	@cd go/ && go build -o logcleaner .
+	@cd go/ && go build -ldflags="-s -w" -o logcleaner .
 	@echo "Done."
 
 test: build
