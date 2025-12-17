@@ -23,7 +23,7 @@ func testError(t *testing.T, message string) {
 
 // Test cleanLog functionality s barvičkami
 func TestCleanLog_Trimming(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestCleanLog_Trimming ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestCleanLog_Trimming ---")
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
@@ -86,7 +86,7 @@ func TestCleanLog_Trimming(t *testing.T) {
 
 // Test with an empty log
 func TestCleanLog_Empty(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestCleanLog_Empty ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestCleanLog_Empty ---")
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "empty.log")
 
@@ -113,7 +113,7 @@ func TestCleanLog_Empty(t *testing.T) {
 
 // Test argument parsing errors
 func TestRunE_ArgumentErrors(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestRunE_ArgumentErrors ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestRunE_ArgumentErrors ---")
 
 	testRunE := func(cmd *cobra.Command, args []string) error {
 		lines, _ := cmd.Flags().GetInt("lines")
@@ -184,7 +184,7 @@ func TestRunE_ArgumentErrors(t *testing.T) {
 
 // Test with date filtering using a real log file
 func TestCleanLog_WithDateFilter(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestCleanLog_WithDateFilter ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestCleanLog_WithDateFilter ---")
 
 	srcLogPath := "test_log.txt"
 	if _, err := os.Stat(srcLogPath); os.IsNotExist(err) {
@@ -237,7 +237,7 @@ func TestCleanLog_WithDateFilter(t *testing.T) {
 
 // Test with content excluding
 func TestCleanLog_ExcludeFilter(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestCleanLog_ExcludeFilter ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestCleanLog_ExcludeFilter ---")
 
 	srcLogPath := "test_log.txt"
 	if _, err := os.Stat(srcLogPath); os.IsNotExist(err) {
@@ -284,7 +284,7 @@ func TestCleanLog_ExcludeFilter(t *testing.T) {
 
 // Test with content and date excluding
 func TestCleanLog_ExcludeAndDateFilter(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestCleanLog_ExcludeAndDateFilter ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestCleanLog_ExcludeAndDateFilter ---")
 
 	srcLogPath := "test_log.txt"
 	if _, err := os.Stat(srcLogPath); os.IsNotExist(err) {
@@ -351,7 +351,7 @@ func equalSlices(a, b []string) bool {
 }
 
 func TestPathValidation(t *testing.T) {
-	testLog(t, ColorCyan, "--- START: TestPathValidation ---")
+	testLog(t, ColorCyan, "\n\n--- START: TestPathValidation ---")
 
 	// Vytvoříme si reálný rootCmd, abychom testovali skutečnou logiku
 	var lines int
