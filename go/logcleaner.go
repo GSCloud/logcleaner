@@ -208,8 +208,8 @@ func main() {
 	)
 
 	var rootCmd = &cobra.Command{
-		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a fast log cleaner and optimizer.",
-		Long:          ColorBold + "LOGCLEANER" + ColorReset + " - a fast log cleaner and optimizer.\n\nA specialized utility to truncate and filter text log files.\nIt merges multiline entries, filters by date and content, and keeps a specified number of the last lines.",
+		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a fast log cleaner and optimizer",
+		Long:          ColorBold + "LOGCLEANER" + ColorReset + " - a fast log cleaner and optimizer\n\nA specialized utility to truncate and filter text log files.\nIt merges multiline entries, filters by date and content, and keeps a specified number of the last lines.",
 		Use:           "logcleaner <path> --lines <number> [--date <date> --format <layout>] [--exclude <string>]",
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
