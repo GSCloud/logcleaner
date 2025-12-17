@@ -148,9 +148,9 @@ func cleanLog(opts CleanOptions) error {
 
 	// 4. Filter by date threshold
 	if opts.MinDateStr != "" && formatLen > 0 {
-		minDate, parseErr := time.Parse(opts.DateFormat, opts.MinDateStr)
-		if parseErr != nil && len(opts.MinDateStr) >= 10 {
-			minDate, _ = time.Parse("2006-01-02", opts.MinDateStr[:10])
+		minDate, err := time.Parse(opts.DateFormat, opts.MinDateStr)
+		if err != nil {
+			return fmt.Errorf("could not parse --date '%s' with format '%s': %w", opts.MinDateStr, opts.DateFormat, err)
 		}
 
 		var dateFiltered []string
@@ -208,12 +208,33 @@ func main() {
 	)
 
 	var rootCmd = &cobra.Command{
-		Short: ColorBold + "LOGCLEANER" + ColorReset + " - minimalistic log tool.",
-		Use:   "logcleaner <path> --lines <n>",
-		Args:  cobra.ExactArgs(1),
+		Short:         ColorBold + "LOGCLEANER" + ColorReset + " - a fast log cleaner and optimizer.",
+		Long:          ColorBold + "LOGCLEANER" + ColorReset + " - a fast log cleaner and optimizer.\n\nA specialized utility to truncate and filter text log files.\nIt merges multiline entries, filters by date and content, and keeps a specified number of the last lines.",
+		Use:           "logcleaner <path> --lines <number> [--date <date> --format <layout>] [--exclude <string>]",
+		Args:          cobra.ExactArgs(1),
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if lines <= 0 {
 				return fmt.Errorf("--lines must be positive")
+			}
+			if !strings.HasPrefix(args[0], "/") && !strings.HasPrefix(args[0], "./") {
+				return fmt.Errorf("path must be absolute (starting with '/') or relative (starting with './')")
+			}
+			// If date is provided, it must be at least 10 chars long.
+			// If format is not provided, derive it from date length.
+			if date != "" {
+				if len(date) < 10 {
+					return fmt.Errorf("--date string must be at least 10 chars (YYYY-MM-DD)")
+				}
+				if format == "" {
+					fullLayout := "2006-01-02 15:04:05"
+					format = fullLayout[:len(date)]
+				} else {
+					if len(date) != len(format) {
+						return fmt.Errorf("--date and --format must have the same length")
+					}
+				}
 			}
 			return cleanLog(CleanOptions{
 				Path:       args[0],
@@ -234,6 +255,9 @@ func main() {
 	rootCmd.PersistentFlags().SortFlags = false
 
 	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(rootCmd.Short)
+		fmt.Fprintf(os.Stderr, "%sError: %v%s\n", ColorRed, err, ColorReset)
+		fmt.Fprintf(os.Stderr, "Use \"--help\" for more information.\n")
 		os.Exit(1)
 	}
 }

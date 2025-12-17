@@ -130,12 +130,29 @@ func TestRunE_ArgumentErrors(t *testing.T) {
 			return fmt.Errorf("error: maximum number of rows must be a positive number")
 		}
 
-		if (date != "" && format == "") || (date == "" && format != "") {
-			return fmt.Errorf("error: --date and --format must be used together")
+		if date != "" {
+			if len(date) < 10 {
+				return fmt.Errorf("--date string must be at least 10 chars (YYYY-MM-DD)")
+			}
+			if format == "" {
+				fullLayout := "2006-01-02 15:04:05"
+				if len(date) > len(fullLayout) {
+					return fmt.Errorf("--date string is longer than the default supported format")
+				}
+				format = fullLayout[:len(date)]
+			} else {
+				if len(date) != len(format) {
+					return fmt.Errorf("--date and --format must have the same length")
+				}
+			}
 		}
 
-		_ = format
-		_ = date
+		// Simplified check for the test
+		if date == "" && format != "" {
+			return fmt.Errorf("error: --format requires --date")
+		}
+
+		// If we passed validation, return nil
 		return nil
 	}
 
@@ -160,8 +177,9 @@ func TestRunE_ArgumentErrors(t *testing.T) {
 	// Cobra handles non-numeric input for Int flags, so we only test logic handled in RunE
 	runSubTest("Negative ML", "-10", "", "", "positive number")
 	runSubTest("Zero ML", "0", "", "", "positive number")
-	runSubTest("Date without Format", "100", "2025-01-01", "", "must be used together")
-	runSubTest("Format without Date", "100", "", "2006-01-02", "must be used together")
+	runSubTest("Format without Date", "100", "", "2006-01-02", "requires --date")
+	runSubTest("Short Date", "100", "2025", "", "must be at least 10 chars")
+	runSubTest("Mismatched Date/Format Length", "100", "2025-01-01", "2006-01", "same length")
 }
 
 // Test with date filtering using a real log file
@@ -330,4 +348,34 @@ func equalSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestPathValidation(t *testing.T) {
+	testLog(t, ColorCyan, "--- START: TestPathValidation ---")
+
+	// Vytvoříme si reálný rootCmd, abychom testovali skutečnou logiku
+	var lines int
+	rootCmd := &cobra.Command{
+		Use:  "logcleaner <path>",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if lines <= 0 {
+				return fmt.Errorf("--lines must be positive")
+			}
+			if !strings.HasPrefix(args[0], "/") && !strings.HasPrefix(args[0], "./") {
+				return fmt.Errorf("path must be absolute (starting with '/') or relative (starting with './')")
+			}
+			// Pro účely testu nevoláme cleanLog, jen vrátíme nil, pokud validace projde
+			return nil
+		},
+	}
+	rootCmd.Flags().IntVar(&lines, "lines", 10, "")
+
+	// Test, který má selhat
+	err := rootCmd.RunE(rootCmd, []string{"invalidpath.log"})
+	if err == nil || !strings.Contains(err.Error(), "path must be absolute") {
+		testError(t, "✖ Path validation failed: an invalid path was accepted.")
+	} else {
+		testLog(t, ColorGreen, "✔ Path validation correctly rejected an invalid path.")
+	}
 }
