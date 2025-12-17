@@ -25,7 +25,7 @@ const (
 	ColorDim    = "\033[2m"
 )
 
-const VERSION = "0.1.29"
+const VERSION = "0.1.30"
 
 func copyFile(src, dst string) error {
 	source, err := os.Open(src)
@@ -47,23 +47,31 @@ func rollback(originalPath, backupPath string) {
 	os.Rename(backupPath, originalPath)
 }
 
-func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, filter []string) error {
-	if minDateStr == "" {
-		dateFormat = ""
+type CleanOptions struct {
+	Path       string
+	MaxRows    int
+	MinDateStr string
+	DateFormat string
+	Exclude    []string
+}
+
+func cleanLog(opts CleanOptions) error {
+	if opts.MinDateStr == "" {
+		opts.DateFormat = ""
 	}
 
-	fmt.Printf("%s[INFO] Cleaning log: %s (max lines: %d)%s\n", ColorBold, path, maxRows, ColorReset)
+	fmt.Printf("%s[INFO] Cleaning log: %s (max lines: %d)%s\n", ColorBold, opts.Path, opts.MaxRows, ColorReset)
 
 	// 1. Backup
-	backupPath := fmt.Sprintf("%s.%s.bak", path, time.Now().Format("2006-01-02-15-04-05"))
-	if err := copyFile(path, backupPath); err != nil {
+	backupPath := fmt.Sprintf("%s.%s.bak", opts.Path, time.Now().Format("2006-01-02-15-04-05"))
+	if err := copyFile(opts.Path, backupPath); err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
 
 	var operationFailed bool
 	defer func() {
 		if operationFailed {
-			rollback(path, backupPath)
+			rollback(opts.Path, backupPath)
 		}
 	}()
 
@@ -96,14 +104,14 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 
 	// 2. Multiline grouping
 	var processedLines []string
-	formatLen := len(dateFormat)
+	formatLen := len(opts.DateFormat)
 
 	if formatLen > 0 {
 		for _, line := range rawLines {
 			isNewEntry := false
 			if len(line) >= formatLen {
 				prefix := line[:formatLen]
-				if _, err := time.Parse(dateFormat, prefix); err == nil {
+				if _, err := time.Parse(opts.DateFormat, prefix); err == nil {
 					isNewEntry = true
 				}
 			}
@@ -121,17 +129,17 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 	}
 
 	// 3. Filter by content
-	if len(filter) > 0 {
+	if len(opts.Exclude) > 0 {
 		var filtered []string
 		for _, entry := range processedLines {
 			match := false
-			for _, f := range filter {
+			for _, f := range opts.Exclude {
 				if strings.Contains(entry, f) {
 					match = true
 					break
 				}
 			}
-			if match {
+			if !match {
 				filtered = append(filtered, entry)
 			}
 		}
@@ -139,38 +147,35 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 	}
 
 	// 4. Filter by date threshold
-	if minDateStr != "" && formatLen > 0 {
-		minDate, parseErr := time.Parse(dateFormat, minDateStr)
-		if parseErr != nil && len(minDateStr) >= 10 {
-			minDate, _ = time.Parse("2006-01-02", minDateStr[:10])
+	if opts.MinDateStr != "" && formatLen > 0 {
+		minDate, parseErr := time.Parse(opts.DateFormat, opts.MinDateStr)
+		if parseErr != nil && len(opts.MinDateStr) >= 10 {
+			minDate, _ = time.Parse("2006-01-02", opts.MinDateStr[:10])
 		}
 
 		var dateFiltered []string
 		for _, entry := range processedLines {
 			if len(entry) >= formatLen {
 				prefix := entry[:formatLen]
-				d, err := time.Parse(dateFormat, prefix)
+				d, err := time.Parse(opts.DateFormat, prefix)
 				if err == nil {
 					if !d.Before(minDate) {
 						dateFiltered = append(dateFiltered, entry)
 					}
-				} else {
-					dateFiltered = append(dateFiltered, entry)
 				}
-			} else {
-				dateFiltered = append(dateFiltered, entry)
 			}
+			// If an entry doesn't start with a valid date, it's discarded when date filtering is active.
 		}
 		processedLines = dateFiltered
 	}
 
 	// 5. Trimming (Applied AFTER date filtering)
-	if len(processedLines) > maxRows {
-		processedLines = processedLines[len(processedLines)-maxRows:]
+	if len(processedLines) > opts.MaxRows {
+		processedLines = processedLines[len(processedLines)-opts.MaxRows:]
 	}
 
 	// 6. Final Write
-	tempPath := path + ".tmp"
+	tempPath := opts.Path + ".tmp"
 	tempFile, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		operationFailed = true
@@ -185,7 +190,7 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 	writer.Flush()
 	tempFile.Close()
 
-	if err := os.Rename(tempPath, path); err != nil {
+	if err := os.Rename(tempPath, opts.Path); err != nil {
 		operationFailed = true
 		return err
 	}
@@ -196,10 +201,10 @@ func cleanLog(path string, maxRows int, minDateStr string, dateFormat string, fi
 
 func main() {
 	var (
-		lines  int
-		date   string
-		format string
-		filter []string
+		lines   int
+		date    string
+		format  string
+		exclude []string
 	)
 
 	var rootCmd = &cobra.Command{
@@ -210,15 +215,23 @@ func main() {
 			if lines <= 0 {
 				return fmt.Errorf("--lines must be positive")
 			}
-			return cleanLog(args[0], lines, date, format, filter)
+			return cleanLog(CleanOptions{
+				Path:       args[0],
+				MaxRows:    lines,
+				MinDateStr: date,
+				DateFormat: format,
+				Exclude:    exclude,
+			})
 		},
 	}
 
 	rootCmd.Flags().IntVar(&lines, "lines", 0, "Max entries to keep")
 	rootCmd.Flags().StringVar(&date, "date", "", "Start date threshold (YYYY-MM-DD)")
 	rootCmd.Flags().StringVar(&format, "format", "", "Date layout in log")
-	rootCmd.Flags().StringSliceVar(&filter, "filter", []string{}, "Keep only entries containing these strings")
+	rootCmd.Flags().StringSliceVar(&exclude, "exclude", []string{}, "Exclude entries containing these strings")
 	rootCmd.MarkFlagRequired("lines")
+	rootCmd.Flags().SortFlags = false
+	rootCmd.PersistentFlags().SortFlags = false
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

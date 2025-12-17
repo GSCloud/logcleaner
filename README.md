@@ -4,7 +4,7 @@
 
 **LOGCLEANER** is a specialized utility designed to truncate text log files to an exact number of last lines, synchronized with a specific point in time. It optimizes log readability by merging multiline entries (lines without a date) and provides powerful filtering capabilities.
 
-## ✨ Key Features
+## ✨ Features
 
 **Precision Truncation**: Keeps exactly the last $N$ lines up to a specific date/time.
 
@@ -16,7 +16,7 @@
 
 ## 🚀 Usage
 
-        logcleaner <log_path> --lines <max_lines> --date <date> --format <date_format> [--filter <filter_stub> ...]
+        logcleaner <log_path> --lines <max_lines> --date <date> --format <date_format> [--exclude <exclude_stub> ...]
 
 ## Parameters
 
@@ -26,7 +26,7 @@
 | **--lines int** | Maximum number of lines to retain. | Required
 | **--date "string"** | Date: Date in the past. | Required
 | **--format "string"** | Date Format: Golang style time format [time#Layout](https://pkg.go.dev/time#Layout). | Required
-| **--filter "string"** | Filter Stub: Only keep lines containing this string (can be used multiple times). | Optional
+| **--exclude "string"** | Exclude Stub: Exclude lines containing this string (can be used multiple times). | Optional
 
 ## 💡 Examples
 
@@ -40,9 +40,9 @@ Cleanup with specific timestamp:
 
         logcleaner /var/log/apache2/messages.txt --lines 1500 --date "2025-01-01 00:00:00" --format "2006-01-02 15:04:05"
 
-Cleanup with ERROR filtering:
+Cleanup with ERROR excluding:
 
-        logcleaner /var/log/apache2/messages.txt --lines 1500 --date "2025-01-01" -format "2006-01-02" --filter "ERROR"
+        logcleaner /var/log/apache2/messages.txt --lines 1500 --date "2025-01-01" -format "2006-01-02" --exclude "DEBUG"
 
 ## 🛠 Commands & Flags
 

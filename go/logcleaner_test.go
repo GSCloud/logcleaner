@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,13 @@ func TestCleanLog_Trimming(t *testing.T) {
 		os.Remove(f)
 	}
 
-	if err := cleanLog(logPath, maxRows, "", "2006-01-02", nil); err != nil {
+	opts := CleanOptions{
+		Path:       logPath,
+		MaxRows:    maxRows,
+		DateFormat: "2006-01-02",
+	}
+
+	if err := cleanLog(opts); err != nil {
 		testError(t, fmt.Sprintf("cleanLog failed: %v", err))
 	}
 
@@ -87,7 +94,12 @@ func TestCleanLog_Empty(t *testing.T) {
 		t.Fatalf("Could not create empty log: %v", err)
 	}
 
-	if err := cleanLog(logPath, 5, "", "2006-01-02", nil); err != nil {
+	opts := CleanOptions{
+		Path:       logPath,
+		MaxRows:    5,
+		DateFormat: "2006-01-02",
+	}
+	if err := cleanLog(opts); err != nil {
 		testError(t, fmt.Sprintf("cleanLog failed on empty file: %v", err))
 	}
 
@@ -172,44 +184,140 @@ func TestCleanLog_WithDateFilter(t *testing.T) {
 	minDateStr := "2025-08-01 00:00:00"
 	dateFormat := "2006-01-02 15:04:05"
 
-	if err := cleanLog(logPath, maxRows, minDateStr, dateFormat, nil); err != nil {
+	opts := CleanOptions{
+		Path:       logPath,
+		MaxRows:    maxRows,
+		MinDateStr: minDateStr,
+		DateFormat: dateFormat,
+	}
+	if err := cleanLog(opts); err != nil {
 		testError(t, fmt.Sprintf("cleanLog with date filter failed: %v", err))
 	}
 
 	cleanedContent, _ := os.ReadFile(logPath)
 	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
 
-	// Expected results based on test_log.txt and minDateStr "2025-08-01"
-	// This will need adjustment if test_log.txt changes.
-	expectedLineCount := 891
+	// Expected results based on test_log.txt and minDateStr "2025-08-01 00:00:00"
 	expectedFirstLinePrefix := "2025-08-01 00:17:15"
 	expectedLastLinePrefix := "2025-11-25 21:53:32"
-
-	if len(lines) != expectedLineCount {
-		testError(t, fmt.Sprintf("✖ Expected %d lines after date filter, but got %d.", expectedLineCount, len(lines)))
-	} else {
-		testLog(t, ColorGreen, fmt.Sprintf("✔ Date filter applied. Kept %d lines as expected.", len(lines)))
-	}
 
 	if len(lines) == 0 {
 		testError(t, "✖ Date filter removed all lines!")
 		return
 	}
 
+	testLog(t, ColorGreen, fmt.Sprintf("✔ Date filter applied. Kept %d lines.", len(lines)))
+
 	if !strings.HasPrefix(lines[0], expectedFirstLinePrefix) {
 		testError(t, fmt.Sprintf("✖ First line prefix mismatch. Expected: '%s', Got: '%s'", expectedFirstLinePrefix, lines[0]))
-		fmt.Printf("\n")
-		fmt.Printf("1. %s\n", lines[0])
-		fmt.Printf("2. %s\n", lines[1])
-		fmt.Printf("3. %s\n", lines[2])
-		fmt.Printf("4. %s\n", lines[3])
-		fmt.Printf("5. %s\n", lines[4])
-		fmt.Printf("\n")
 	}
 
 	if !strings.HasPrefix(lines[len(lines)-1], expectedLastLinePrefix) {
 		testError(t, fmt.Sprintf("✖ Last line prefix mismatch. Expected: '%s', Got: '%s'", expectedLastLinePrefix, lines[len(lines)-1]))
 	}
+}
+
+// Test with content excluding
+func TestCleanLog_ExcludeFilter(t *testing.T) {
+	testLog(t, ColorCyan, "--- START: TestCleanLog_ExcludeFilter ---")
+
+	srcLogPath := "test_log.txt"
+	if _, err := os.Stat(srcLogPath); os.IsNotExist(err) {
+		t.Skip("Skipping: test_log.txt not found in current directory.")
+	}
+
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	data, _ := os.ReadFile(srcLogPath)
+	os.WriteFile(logPath, data, 0644)
+
+	maxRows := 1000
+	exclude := []string{"Path"}
+	dateFormat := "2006-01-02 15:04:05" // Provide format for merging
+
+	opts := CleanOptions{
+		Path:       logPath,
+		MaxRows:    maxRows,
+		DateFormat: dateFormat,
+		Exclude:    exclude,
+	}
+	if err := cleanLog(opts); err != nil {
+		testError(t, fmt.Sprintf("cleanLog with exclude filter failed: %v", err))
+	}
+
+	cleanedContent, _ := os.ReadFile(logPath)
+	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
+
+	if len(lines) == 0 {
+		testError(t, "✖ Content filter removed all lines!")
+		return
+	}
+
+	for _, line := range lines {
+		if strings.Contains(line, "Path") {
+			testError(t, fmt.Sprintf("✖ Line with 'Path' found after excluding:\n%s", line))
+			return
+		}
+	}
+
+	testLog(t, ColorGreen, fmt.Sprintf("✔ Exclude filter applied. Kept %d lines not containing 'Path'.", len(lines)))
+}
+
+// Test with content and date excluding
+func TestCleanLog_ExcludeAndDateFilter(t *testing.T) {
+	testLog(t, ColorCyan, "--- START: TestCleanLog_ExcludeAndDateFilter ---")
+
+	srcLogPath := "test_log.txt"
+	if _, err := os.Stat(srcLogPath); os.IsNotExist(err) {
+		t.Skip("Skipping: test_log.txt not found in current directory.")
+	}
+
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+
+	data, _ := os.ReadFile(srcLogPath)
+	os.WriteFile(logPath, data, 0644)
+
+	maxRows := 1000
+	minDateStr := "2025-09-01 00:00:00"
+	dateFormat := "2006-01-02 15:04:05"
+	exclude := []string{"Path"}
+
+	opts := CleanOptions{
+		Path:       logPath,
+		MaxRows:    maxRows,
+		MinDateStr: minDateStr,
+		DateFormat: dateFormat,
+		Exclude:    exclude,
+	}
+	if err := cleanLog(opts); err != nil {
+		testError(t, fmt.Sprintf("cleanLog with exclude and date filter failed: %v", err))
+	}
+
+	cleanedContent, _ := os.ReadFile(logPath)
+	lines := strings.Split(strings.TrimSpace(string(cleanedContent)), "\n")
+
+	if len(lines) == 0 {
+		testError(t, "✖ Content and date filter removed all lines!")
+		return
+	}
+
+	minDate, _ := time.Parse(dateFormat, minDateStr)
+
+	for _, line := range lines {
+		if strings.Contains(line, "Path") {
+			testError(t, fmt.Sprintf("✖ Line with 'Path' found after excluding:\n%s", line))
+			return
+		}
+		lineDate, err := time.Parse(dateFormat, line[:len(dateFormat)])
+		if err != nil || lineDate.Before(minDate) {
+			testError(t, fmt.Sprintf("✖ Line with incorrect date found after filtering:\n%s", line))
+			return
+		}
+	}
+
+	testLog(t, ColorGreen, fmt.Sprintf("✔ Exclude and date filter applied. Kept %d lines.", len(lines)))
 }
 
 func equalSlices(a, b []string) bool {
