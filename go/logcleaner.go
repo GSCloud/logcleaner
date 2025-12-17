@@ -11,6 +11,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// shell colors
+const (
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	ColorPurple = "\033[35m"
+	ColorCyan   = "\033[36m"
+	ColorWhite  = "\033[37m"
+	ColorReset  = "\033[0m"
+	ColorBold   = "\033[1m"
+	ColorDim    = "\033[2m"
+	ColorUnder  = "\033[4m"
+	ColorBlink  = "\033[5m"
+	ColorRev    = "\033[7m"
+	ColorHidden = "\033[8m"
+)
+
+// app version
+const (
+	VERSION = "0.0.1"
+)
+
 // CLEANLOG - CONTAINS MAIN LOGIC
 // cleanLog performs the core log file trimming and filtering operations
 
@@ -117,7 +140,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	// Create temp file in the same directory as the original log
 	tempFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
 	if err != nil {
-		return fmt.Errorf("error creating temporary file: %w", err)
+		return fmt.Errorf("error creating a temporary file: %w", err)
 	}
 	tempPath := tempFile.Name()
 
@@ -127,7 +150,7 @@ func cleanLog(path string, maxRows int, dateFormat string) error {
 	for _, line := range finalLines {
 		if _, err := fmt.Fprintln(writer, line); err != nil {
 			tempFile.Close() // Close file before returning
-			return fmt.Errorf("error writing to temporary file: %w", err)
+			return fmt.Errorf("error writing to a temporary file: %w", err)
 		}
 	}
 	writer.Flush()   // Ensure all buffered data is written to the file
@@ -157,7 +180,7 @@ func main() {
 		Long:    "LOGCLEANER is designed to maintain optimal log file size by precisely truncating a specified log file. It retains only the desired number of the most recent lines, allowing filtering up to a designated date in the past. This makes it easy to drop outdated log entries and ensure your logs remain current and manageable.\n",
 		Use:     "\tlogcleaner <log_path> <max_lines> <date_format>",
 		Example: "\tlogcleaner /path/messages.txt 5000 \"2025-01-15 15:04:05\"",
-		// silencing Cobra parameters
+		// silencing Cobra
 		SilenceErrors: true,
 		SilenceUsage:  true,
 
@@ -178,12 +201,12 @@ func main() {
 			// Validate max_lines is a number
 			rows, err := strconv.Atoi(rowsStr)
 			if err != nil {
-				// Error: Bad argument format
+				// error: Bad argument format
 				return fmt.Errorf("error: second argument 'max_lines' must be a number, but was: %s", rowsStr)
 			}
 			// Validate max_lines is positive
 			if rows <= 0 {
-				// Error: Invalid argument value
+				// error: Invalid argument value
 				return fmt.Errorf("error: maximum number of lines must be a positive number")
 			}
 

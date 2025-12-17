@@ -8,5 +8,5 @@
 .editorconfig
 .env
 Thumbs.db
-vendor/
 realtest.txt
+vendor/
