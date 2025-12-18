@@ -25,7 +25,26 @@ const (
 	ColorDim    = "\033[2m"
 )
 
-const VERSION = "0.1.30"
+const VERSION = "0.1.31"
+
+// custom help template
+var helpTemplate = fmt.Sprintf(`
+%s%s v%s%s
+{{.Short}}
+
+%sUsage:%s
+  {{.UseLine}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if .HasAvailableLocalFlags}}
+
+%sFlags:%s
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+%sGlobal Flags:%s
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasExample}}
+
+%sExamples:%s
+{{.Example}}{{end}}
+`, ColorBold, "LOGCLEANER", VERSION, ColorReset, ColorYellow, ColorReset, ColorYellow, ColorReset, ColorYellow, ColorReset, ColorYellow, ColorReset)
 
 func copyFile(src, dst string) error {
 	source, err := os.Open(src)
@@ -214,6 +233,7 @@ func main() {
 		Args:          cobra.ExactArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       VERSION,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if lines <= 0 {
 				return fmt.Errorf("--lines must be positive")
@@ -246,10 +266,11 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().IntVar(&lines, "lines", 0, "Max entries to keep")
-	rootCmd.Flags().StringVar(&date, "date", "", "Start date threshold (YYYY-MM-DD)")
-	rootCmd.Flags().StringVar(&format, "format", "", "Date layout in log")
-	rootCmd.Flags().StringSliceVar(&exclude, "exclude", []string{}, "Exclude entries containing these strings")
+	rootCmd.SetHelpTemplate(helpTemplate)
+	rootCmd.Flags().IntVar(&lines, "lines", 0, "max entries to keep")
+	rootCmd.Flags().StringVar(&date, "date", "", "start date threshold (YYYY-MM-DD)")
+	rootCmd.Flags().StringVar(&format, "format", "", "date layout in log")
+	rootCmd.Flags().StringSliceVar(&exclude, "exclude", []string{}, "exclude entries containing these strings")
 	rootCmd.MarkFlagRequired("lines")
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().SortFlags = false
